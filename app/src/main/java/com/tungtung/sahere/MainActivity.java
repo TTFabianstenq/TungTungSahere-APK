@@ -3,18 +3,19 @@ package com.tungtung.sahere;
 import android.Manifest;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.database.ContentObserver;
 import android.media.AudioAttributes;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
-import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
 import android.view.WindowManager;
+import android.widget.TextView;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
@@ -25,6 +26,10 @@ public class MainActivity extends AppCompatActivity {
     private MediaPlayer mediaPlayer;
     private AudioManager audioManager;
     private ContentObserver volumeObserver;
+    private TextView leaveCounterView;
+    private SharedPreferences prefs;
+    private static final String PREFS_NAME = "TungTungPrefs";
+    private static final String KEY_LEAVE_COUNT = "leave_count";
     private static final int NOTIFICATION_PERMISSION_CODE = 1001;
 
     @Override
@@ -35,6 +40,11 @@ public class MainActivity extends AppCompatActivity {
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         setContentView(R.layout.activity_main);
+
+        leaveCounterView = findViewById(R.id.leaveCounter);
+        prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+
+        updateCounterDisplay();
 
         // Request notification permission on Android 13+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -90,9 +100,26 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private void updateCounterDisplay() {
+        int count = prefs.getInt(KEY_LEAVE_COUNT, 0);
+        if (leaveCounterView != null) {
+            leaveCounterView.setText("Times left: " + count);
+        }
+    }
+
+    private void incrementLeaveCount() {
+        int count = prefs.getInt(KEY_LEAVE_COUNT, 0) + 1;
+        prefs.edit().putInt(KEY_LEAVE_COUNT, count).apply();
+        updateCounterDisplay();
+    }
+
     @Override
     protected void onPause() {
         super.onPause();
+
+        // Count this leave attempt
+        incrementLeaveCount();
+
         // Start the background spam service when leaving the app
         Intent serviceIntent = new Intent(this, ComeBackService.class);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -111,6 +138,7 @@ public class MainActivity extends AppCompatActivity {
         stopService(serviceIntent);
 
         forceMaxVolume();
+        updateCounterDisplay();
 
         if (mediaPlayer != null && !mediaPlayer.isPlaying()) {
             mediaPlayer.start();
