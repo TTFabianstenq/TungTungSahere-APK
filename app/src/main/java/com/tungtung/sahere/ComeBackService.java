@@ -7,7 +7,9 @@ import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.media.AudioAttributes;
 import android.media.AudioManager;
+import android.media.MediaPlayer;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
@@ -25,14 +27,16 @@ public class ComeBackService extends Service {
     private int notificationId = 1;
     private boolean running = false;
     private AudioManager audioManager;
+    private MediaPlayer mediaPlayer;
 
     private final Runnable spamRunnable = new Runnable() {
         @Override
         public void run() {
             if (running) {
                 forceMaxVolume();
+                ensureSoundPlaying();
                 sendComeBackNotification();
-                handler.postDelayed(this, 700); // every 0.7 seconds
+                handler.postDelayed(this, 800);
             }
         }
     };
@@ -42,6 +46,7 @@ public class ComeBackService extends Service {
         super.onCreate();
         audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
         createChannels();
+        startSound();
     }
 
     @Override
@@ -57,8 +62,8 @@ public class ComeBackService extends Service {
     public void onDestroy() {
         running = false;
         handler.removeCallbacksAndMessages(null);
+        stopSound();
 
-        // Clear the spam notifications when service stops
         NotificationManager manager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         if (manager != null) {
             manager.cancelAll();
@@ -70,6 +75,51 @@ public class ComeBackService extends Service {
     @Override
     public IBinder onBind(Intent intent) {
         return null;
+    }
+
+    private void startSound() {
+        try {
+            if (mediaPlayer == null) {
+                mediaPlayer = MediaPlayer.create(this, R.raw.tungtung);
+                if (mediaPlayer != null) {
+                    mediaPlayer.setLooping(true);
+                    mediaPlayer.setVolume(1.0f, 1.0f);
+                    mediaPlayer.setAudioAttributes(
+                            new AudioAttributes.Builder()
+                                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                                    .build()
+                    );
+                    mediaPlayer.start();
+                }
+            }
+        } catch (Exception e) {
+            // ignore
+        }
+    }
+
+    private void ensureSoundPlaying() {
+        try {
+            if (mediaPlayer != null && !mediaPlayer.isPlaying()) {
+                mediaPlayer.start();
+            }
+        } catch (Exception e) {
+            // try to recreate
+            stopSound();
+            startSound();
+        }
+    }
+
+    private void stopSound() {
+        try {
+            if (mediaPlayer != null) {
+                mediaPlayer.stop();
+                mediaPlayer.release();
+                mediaPlayer = null;
+            }
+        } catch (Exception e) {
+            mediaPlayer = null;
+        }
     }
 
     private void forceMaxVolume() {
@@ -93,6 +143,8 @@ public class ComeBackService extends Service {
                     NotificationManager.IMPORTANCE_HIGH
             );
             spamChannel.setDescription("Come Back spam");
+            spamChannel.enableVibration(true);
+            spamChannel.setVibrationPattern(new long[]{0, 200, 100, 200});
             manager.createNotificationChannel(spamChannel);
 
             NotificationChannel fgChannel = new NotificationChannel(
@@ -138,8 +190,10 @@ public class ComeBackService extends Service {
                 .setContentText("Come Back!")
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setCategory(NotificationCompat.CATEGORY_ALARM)
                 .setAutoCancel(true)
                 .setContentIntent(pendingIntent)
+                .setVibrate(new long[]{0, 200, 100, 200})
                 .build();
 
         manager.notify(notificationId++, notification);
