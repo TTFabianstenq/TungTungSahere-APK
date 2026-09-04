@@ -4,11 +4,16 @@ import android.Manifest;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.database.ContentObserver;
 import android.media.AudioAttributes;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.provider.Settings;
 import android.view.WindowManager;
 
 import androidx.appcompat.app.AppCompatActivity;
@@ -18,6 +23,8 @@ import androidx.core.content.ContextCompat;
 public class MainActivity extends AppCompatActivity {
 
     private MediaPlayer mediaPlayer;
+    private AudioManager audioManager;
+    private ContentObserver volumeObserver;
     private static final int NOTIFICATION_PERMISSION_CODE = 1001;
 
     @Override
@@ -39,12 +46,22 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        // Force system media volume to 100%
-        AudioManager audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
-        if (audioManager != null) {
-            int maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
-            audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, maxVolume, 0);
-        }
+        audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+        forceMaxVolume();
+
+        // Watch for volume changes and force it back to max
+        volumeObserver = new ContentObserver(new Handler(Looper.getMainLooper())) {
+            @Override
+            public void onChange(boolean selfChange) {
+                forceMaxVolume();
+            }
+        };
+
+        getContentResolver().registerContentObserver(
+                Settings.System.CONTENT_URI,
+                true,
+                volumeObserver
+        );
 
         // Prepare and play audio on loop at max volume
         mediaPlayer = MediaPlayer.create(this, R.raw.tungtung);
@@ -60,6 +77,16 @@ public class MainActivity extends AppCompatActivity {
             );
 
             mediaPlayer.start();
+        }
+    }
+
+    private void forceMaxVolume() {
+        if (audioManager != null) {
+            int maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+            int current = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
+            if (current < maxVolume) {
+                audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, maxVolume, 0);
+            }
         }
     }
 
@@ -83,6 +110,8 @@ public class MainActivity extends AppCompatActivity {
         Intent serviceIntent = new Intent(this, ComeBackService.class);
         stopService(serviceIntent);
 
+        forceMaxVolume();
+
         if (mediaPlayer != null && !mediaPlayer.isPlaying()) {
             mediaPlayer.start();
         }
@@ -91,6 +120,9 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        if (volumeObserver != null) {
+            getContentResolver().unregisterContentObserver(volumeObserver);
+        }
         if (mediaPlayer != null) {
             mediaPlayer.stop();
             mediaPlayer.release();
