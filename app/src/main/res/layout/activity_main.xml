@@ -12,17 +12,4 @@
         android:scaleType="fitCenter"
         android:contentDescription="Tung Tung" />
 
-    <TextView
-        android:id="@+id/leaveCounter"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="top|center_horizontal"
-        android:layout_marginTop="48dp"
-        android:padding="12dp"
-        android:background="#99000000"
-        android:textColor="#FFFFFF"
-        android:textSize="18sp"
-        android:textStyle="bold"
-        android:text="Times left: 0" />
-
 </FrameLayout>
