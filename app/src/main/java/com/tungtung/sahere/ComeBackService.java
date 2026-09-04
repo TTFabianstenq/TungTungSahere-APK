@@ -5,7 +5,9 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.content.Context;
 import android.content.Intent;
+import android.media.AudioManager;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
@@ -22,11 +24,13 @@ public class ComeBackService extends Service {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private int notificationId = 1;
     private boolean running = false;
+    private AudioManager audioManager;
 
     private final Runnable spamRunnable = new Runnable() {
         @Override
         public void run() {
             if (running) {
+                forceMaxVolume();
                 sendComeBackNotification();
                 handler.postDelayed(this, 700); // every 0.7 seconds
             }
@@ -36,6 +40,7 @@ public class ComeBackService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
         createChannels();
     }
 
@@ -67,12 +72,21 @@ public class ComeBackService extends Service {
         return null;
     }
 
+    private void forceMaxVolume() {
+        if (audioManager != null) {
+            int maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+            int current = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
+            if (current < maxVolume) {
+                audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, maxVolume, 0);
+            }
+        }
+    }
+
     private void createChannels() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationManager manager = getSystemService(NotificationManager.class);
             if (manager == null) return;
 
-            // Channel for the spam notifications
             NotificationChannel spamChannel = new NotificationChannel(
                     CHANNEL_ID,
                     "Come Back Notifications",
@@ -81,7 +95,6 @@ public class ComeBackService extends Service {
             spamChannel.setDescription("Come Back spam");
             manager.createNotificationChannel(spamChannel);
 
-            // Channel for the persistent foreground notification
             NotificationChannel fgChannel = new NotificationChannel(
                     FOREGROUND_CHANNEL_ID,
                     "Background Service",
