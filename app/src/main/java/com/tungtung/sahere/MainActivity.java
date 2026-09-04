@@ -3,7 +3,6 @@ package com.tungtung.sahere;
 import android.Manifest;
 import android.content.Context;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.database.ContentObserver;
 import android.media.AudioAttributes;
@@ -15,7 +14,6 @@ import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
 import android.view.WindowManager;
-import android.widget.TextView;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
@@ -26,25 +24,14 @@ public class MainActivity extends AppCompatActivity {
     private MediaPlayer mediaPlayer;
     private AudioManager audioManager;
     private ContentObserver volumeObserver;
-    private TextView leaveCounterView;
-    private SharedPreferences prefs;
-    private static final String PREFS_NAME = "TungTungPrefs";
-    private static final String KEY_LEAVE_COUNT = "leave_count";
     private static final int NOTIFICATION_PERMISSION_CODE = 1001;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        // Keep screen on
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-
         setContentView(R.layout.activity_main);
-
-        leaveCounterView = findViewById(R.id.leaveCounter);
-        prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
-
-        updateCounterDisplay();
 
         // Request notification permission on Android 13+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -59,33 +46,25 @@ public class MainActivity extends AppCompatActivity {
         audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
         forceMaxVolume();
 
-        // Watch for volume changes and force it back to max
         volumeObserver = new ContentObserver(new Handler(Looper.getMainLooper())) {
             @Override
             public void onChange(boolean selfChange) {
                 forceMaxVolume();
             }
         };
+        getContentResolver().registerContentObserver(Settings.System.CONTENT_URI, true, volumeObserver);
 
-        getContentResolver().registerContentObserver(
-                Settings.System.CONTENT_URI,
-                true,
-                volumeObserver
-        );
-
-        // Prepare and play audio on loop at max volume
+        // Play sound while the activity is open
         mediaPlayer = MediaPlayer.create(this, R.raw.tungtung);
         if (mediaPlayer != null) {
             mediaPlayer.setLooping(true);
             mediaPlayer.setVolume(1.0f, 1.0f);
-
             mediaPlayer.setAudioAttributes(
                     new AudioAttributes.Builder()
                             .setUsage(AudioAttributes.USAGE_MEDIA)
                             .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
                             .build()
             );
-
             mediaPlayer.start();
         }
     }
@@ -93,34 +72,22 @@ public class MainActivity extends AppCompatActivity {
     private void forceMaxVolume() {
         if (audioManager != null) {
             int maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
-            int current = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
-            if (current < maxVolume) {
+            if (audioManager.getStreamVolume(AudioManager.STREAM_MUSIC) < maxVolume) {
                 audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, maxVolume, 0);
             }
         }
-    }
-
-    private void updateCounterDisplay() {
-        int count = prefs.getInt(KEY_LEAVE_COUNT, 0);
-        if (leaveCounterView != null) {
-            leaveCounterView.setText("Times left: " + count);
-        }
-    }
-
-    private void incrementLeaveCount() {
-        int count = prefs.getInt(KEY_LEAVE_COUNT, 0) + 1;
-        prefs.edit().putInt(KEY_LEAVE_COUNT, count).apply();
-        updateCounterDisplay();
     }
 
     @Override
     protected void onPause() {
         super.onPause();
 
-        // Count this leave attempt
-        incrementLeaveCount();
+        // Stop activity sound so the service can take over cleanly
+        if (mediaPlayer != null && mediaPlayer.isPlaying()) {
+            mediaPlayer.pause();
+        }
 
-        // Start the background spam service when leaving the app
+        // Start background service (sound + notifications + volume lock)
         Intent serviceIntent = new Intent(this, ComeBackService.class);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(serviceIntent);
@@ -133,12 +100,10 @@ public class MainActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
 
-        // Stop the spam when user comes back
-        Intent serviceIntent = new Intent(this, ComeBackService.class);
-        stopService(serviceIntent);
+        // Stop the background service when user returns
+        stopService(new Intent(this, ComeBackService.class));
 
         forceMaxVolume();
-        updateCounterDisplay();
 
         if (mediaPlayer != null && !mediaPlayer.isPlaying()) {
             mediaPlayer.start();
