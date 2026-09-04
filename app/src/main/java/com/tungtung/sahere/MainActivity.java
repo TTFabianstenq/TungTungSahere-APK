@@ -1,6 +1,8 @@
 package com.tungtung.sahere;
 
+import android.content.Context;
 import android.media.AudioAttributes;
+import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.os.Bundle;
 import android.view.WindowManager;
@@ -21,16 +23,19 @@ public class MainActivity extends AppCompatActivity {
 
         setContentView(R.layout.activity_main);
 
-        ImageView imageView = findViewById(R.id.imageView);
-        // Image is already set in layout
+        // Force system media volume to 100%
+        AudioManager audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+        if (audioManager != null) {
+            int maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+            audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, maxVolume, 0);
+        }
 
         // Prepare and play audio on loop at max volume
         mediaPlayer = MediaPlayer.create(this, R.raw.tungtung);
         if (mediaPlayer != null) {
             mediaPlayer.setLooping(true);
-            mediaPlayer.setVolume(1.0f, 1.0f); // 100% volume
+            mediaPlayer.setVolume(1.0f, 1.0f); // 100% MediaPlayer volume
 
-            // Use modern audio attributes
             mediaPlayer.setAudioAttributes(
                     new AudioAttributes.Builder()
                             .setUsage(AudioAttributes.USAGE_MEDIA)
@@ -50,15 +55,6 @@ public class MainActivity extends AppCompatActivity {
             mediaPlayer.release();
             mediaPlayer = null;
         }
-    }
-
-    @Override
-    protected void onPause() {
-        super.onPause();
-        // Optional: pause when app goes to background
-        // if (mediaPlayer != null && mediaPlayer.isPlaying()) {
-        //     mediaPlayer.pause();
-        // }
     }
 
     @Override
