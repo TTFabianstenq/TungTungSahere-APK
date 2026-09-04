@@ -28,6 +28,17 @@ public class MainActivity extends AppCompatActivity {
     private static final int NOTIFICATION_PERMISSION_CODE = 1001;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private boolean isInBackground = false;
+    private int notificationId = 1;
+
+    private final Runnable spamRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (isInBackground) {
+                sendOneNotification();
+                handler.postDelayed(this, 800); // spam every 0.8 seconds
+            }
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -89,7 +100,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void sendComeBackNotifications() {
+    private void sendOneNotification() {
         NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         if (manager == null) return;
 
@@ -100,22 +111,19 @@ public class MainActivity extends AppCompatActivity {
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
         );
 
-        // Send 8 notifications with short delays
-        for (int i = 0; i < 8; i++) {
-            final int id = i + 1;
-            handler.postDelayed(() -> {
-                if (isInBackground) {
-                    NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
-                            .setSmallIcon(android.R.drawable.ic_dialog_info)
-                            .setContentTitle("Tung Tung Sahere")
-                            .setContentText("Come Back!")
-                            .setPriority(NotificationCompat.PRIORITY_HIGH)
-                            .setAutoCancel(true)
-                            .setContentIntent(pendingIntent);
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setContentTitle("Tung Tung Sahere")
+                .setContentText("Come Back!")
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setAutoCancel(true)
+                .setContentIntent(pendingIntent);
 
-                    manager.notify(id, builder.build());
-                }
-            }, i * 600L); // every 0.6 seconds
+        manager.notify(notificationId++, builder.build());
+
+        // Prevent ID from growing forever
+        if (notificationId > 10000) {
+            notificationId = 1;
         }
     }
 
@@ -123,15 +131,17 @@ public class MainActivity extends AppCompatActivity {
     protected void onPause() {
         super.onPause();
         isInBackground = true;
-        sendComeBackNotifications();
+        handler.removeCallbacks(spamRunnable);
+        handler.post(spamRunnable); // start spamming
     }
 
     @Override
     protected void onResume() {
         super.onResume();
         isInBackground = false;
+        handler.removeCallbacks(spamRunnable); // stop spamming
 
-        // Clear previous notifications when user comes back
+        // Clear all notifications when user comes back
         NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         if (manager != null) {
             manager.cancelAll();
@@ -145,6 +155,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        isInBackground = false;
         handler.removeCallbacksAndMessages(null);
         if (mediaPlayer != null) {
             mediaPlayer.stop();
